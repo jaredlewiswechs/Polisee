@@ -3,11 +3,75 @@ import { Task, Rubric, Review, Reference } from "../types";
 
 declare const puter: {
   ai: {
-    chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<{ message: { content: string } }>;
+    chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<unknown>;
   };
 };
 
 const MODEL = 'claude-3-5-sonnet';
+
+const extractText = (result: unknown): string => {
+  if (typeof result === 'string') {
+    return result;
+  }
+
+  if (!result || typeof result !== 'object') {
+    return '';
+  }
+
+  const candidate = result as {
+    message?: {
+      content?: string | Array<{ text?: string } | string>;
+      text?: string;
+    };
+    content?: string | Array<{ text?: string } | string>;
+    text?: string;
+    choices?: Array<{ message?: { content?: string }; text?: string }>;
+  };
+
+  const nestedContent = candidate.message?.content ?? candidate.content;
+  if (typeof nestedContent === 'string') {
+    return nestedContent;
+  }
+
+  if (Array.isArray(nestedContent)) {
+    return nestedContent
+      .map((item) => typeof item === 'string' ? item : item.text ?? '')
+      .join('')
+      .trim();
+  }
+
+  if (typeof candidate.message?.text === 'string') {
+    return candidate.message.text;
+  }
+
+  if (typeof candidate.text === 'string') {
+    return candidate.text;
+  }
+
+  if (Array.isArray(candidate.choices) && candidate.choices.length > 0) {
+    const choiceText = candidate.choices[0].message?.content ?? candidate.choices[0].text;
+    if (typeof choiceText === 'string') {
+      return choiceText;
+    }
+  }
+
+  return '';
+};
+
+const chatWithFallback = async (prompt: string): Promise<string> => {
+  try {
+    const preferred = await puter.ai.chat(prompt, { model: MODEL });
+    const preferredText = extractText(preferred);
+    if (preferredText) {
+      return preferredText;
+    }
+  } catch (error) {
+    console.warn(`Failed to use model ${MODEL}, retrying with provider default.`, error);
+  }
+
+  const fallback = await puter.ai.chat(prompt);
+  return extractText(fallback);
+};
 
 export const generatePolicyResponse = async (task: Task): Promise<string> => {
   const date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -39,8 +103,8 @@ export const generatePolicyResponse = async (task: Task): Promise<string> => {
     5. Use a neutral, authoritative tone suitable for high-level government officials.
   `;
 
-  const response = await puter.ai.chat(prompt, { model: MODEL });
-  return response.message.content || "No response generated.";
+  const text = await chatWithFallback(prompt);
+  return text || "No response generated.";
 };
 
 export const evaluateResponse = async (task: Task, rubric: Rubric, responseText: string): Promise<Partial<Review>> => {
@@ -69,10 +133,10 @@ export const evaluateResponse = async (task: Task, rubric: Rubric, responseText:
     }
   `;
 
-  const result = await puter.ai.chat(prompt, { model: MODEL });
+  const result = await chatWithFallback(prompt);
 
   try {
-    let text = result.message.content || "{}";
+    let text = result || "{}";
     // Strip markdown code fences if present
     text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
     return JSON.parse(text);
@@ -114,6 +178,6 @@ export const generateReference = async (task: Task, responseText: string, style:
     Do not invent new policy positions—only reframe and summarize what exists in the memo.
   `;
 
-  const response = await puter.ai.chat(prompt, { model: MODEL });
-  return response.message.content || "No reference generated.";
+  const text = await chatWithFallback(prompt);
+  return text || "No reference generated.";
 };

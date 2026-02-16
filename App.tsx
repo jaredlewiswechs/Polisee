@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Task, Rubric, Response, Review, Reference, LedgerEvent, Domain, DeliverableType, LedgerEventType, SCHEMA_VERSION, RubricCriteria } from './types';
 import { getInitialStore, saveStore, createEvent } from './services/db';
 import { STARTER_TASKS, STARTER_RUBRICS } from './constants.tsx';
-import { generatePolicyResponse, evaluateResponse } from './services/gemini';
+import { generatePolicyResponse, evaluateResponse, generateReference } from './services/gemini';
 
 // --- Icons ---
 const HomeIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>;
@@ -11,8 +11,9 @@ const TasksIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColo
 const RubricsIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>;
 const ReviewsIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 const ExportIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
+const ReferencesIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>;
 
-type View = 'home' | 'tasks' | 'rubrics' | 'reviews' | 'export' | 'history';
+type View = 'home' | 'tasks' | 'rubrics' | 'reviews' | 'references' | 'export' | 'history';
 
 const App: React.FC = () => {
   const [store, setStore] = useState(getInitialStore());
@@ -92,7 +93,7 @@ const App: React.FC = () => {
       const newResponse: Response = {
         id: `res-${Date.now()}`,
         task_id: task.id,
-        model_info: 'gemini-3-flash-preview',
+        model_info: 'claude-3-5-sonnet (via Puter)',
         text,
         created_at: Date.now()
       };
@@ -117,6 +118,26 @@ const App: React.FC = () => {
     addEvent('EXPORT_DATASET', 'Dataset', 'all', `Exported data as ${format}`);
   };
 
+  const handleGenerateReference = async (task: Task, responseText: string, style: Reference['style']) => {
+    setLoading(true);
+    try {
+      const text = await generateReference(task, responseText, style);
+      const newRef: Reference = {
+        id: `ref-${Date.now()}`,
+        task_id: task.id,
+        text,
+        style,
+        created_at: Date.now()
+      };
+      setStore(prev => ({ ...prev, references: [newRef, ...prev.references] }));
+      addEvent('WRITE_REFERENCE', 'Reference', newRef.id, `Generated ${style} reference for task: ${task.title}`);
+    } catch (e) {
+      alert("Something went wrong generating the reference.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- Views ---
 
   const HomeView = () => (
@@ -126,22 +147,26 @@ const App: React.FC = () => {
         <p className="text-gray-500 font-medium">System of Systems Governance</p>
       </header>
 
-      <div className="grid grid-cols-2 gap-4">
-        <button onClick={() => setActiveView('tasks')} className="apple-card p-6 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
+      <div className="grid grid-cols-3 gap-3">
+        <button onClick={() => setActiveView('tasks')} className="apple-card p-5 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
           <div className="text-blue-500"><TasksIcon /></div>
-          <span className="font-semibold text-sm">Policy Lab</span>
+          <span className="font-semibold text-xs">Policy Lab</span>
         </button>
-        <button onClick={() => setActiveView('reviews')} className="apple-card p-6 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
+        <button onClick={() => setActiveView('reviews')} className="apple-card p-5 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
           <div className="text-green-500"><ReviewsIcon /></div>
-          <span className="font-semibold text-sm">Evaluations</span>
+          <span className="font-semibold text-xs">Evaluations</span>
         </button>
-        <button onClick={() => setActiveView('rubrics')} className="apple-card p-6 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
+        <button onClick={() => setActiveView('rubrics')} className="apple-card p-5 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
           <div className="text-orange-500"><RubricsIcon /></div>
-          <span className="font-semibold text-sm">Rulesets</span>
+          <span className="font-semibold text-xs">Rulesets</span>
         </button>
-        <button onClick={() => setActiveView('export')} className="apple-card p-6 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
-          <div className="text-purple-500"><ExportIcon /></div>
-          <span className="font-semibold text-sm">Datasets</span>
+        <button onClick={() => setActiveView('references')} className="apple-card p-5 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
+          <div className="text-purple-500"><ReferencesIcon /></div>
+          <span className="font-semibold text-xs">References</span>
+        </button>
+        <button onClick={() => setActiveView('export')} className="apple-card p-5 flex flex-col items-center justify-center space-y-2 hover:bg-white/90 active:scale-95 transition-all">
+          <div className="text-indigo-500"><ExportIcon /></div>
+          <span className="font-semibold text-xs">Datasets</span>
         </button>
       </div>
 
@@ -723,6 +748,129 @@ const App: React.FC = () => {
     );
   };
 
+  const ReferencesView = () => {
+    const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+    const [selectedStyle, setSelectedStyle] = useState<Reference['style']>('neutral');
+    const [refLoading, setRefLoading] = useState(false);
+
+    const tasksWithResponses = useMemo(() =>
+      store.tasks.filter(t => store.responses.some(r => r.task_id === t.id)),
+      [store.tasks, store.responses]
+    );
+
+    const selectedTask = store.tasks.find(t => t.id === selectedTaskId);
+    const latestResponse = useMemo(() =>
+      store.responses.find(r => r.task_id === selectedTaskId),
+      [store.responses, selectedTaskId]
+    );
+
+    const refsForTask = useMemo(() =>
+      store.references.filter(r => r.task_id === selectedTaskId),
+      [store.references, selectedTaskId]
+    );
+
+    const handleGenerate = async () => {
+      if (!selectedTask || !latestResponse) return;
+      setRefLoading(true);
+      try {
+        await handleGenerateReference(selectedTask, latestResponse.text, selectedStyle);
+      } finally {
+        setRefLoading(false);
+      }
+    };
+
+    const styleLabels: Record<Reference['style'], string> = {
+      neutral: 'Neutral / Academic',
+      staffer: 'Legislative Staffer',
+      brief: 'Executive Brief',
+      'one-pager': 'One-Pager'
+    };
+
+    return (
+      <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+        <h2 className="text-2xl font-bold tracking-tight px-2">Reference Writer</h2>
+
+        {tasksWithResponses.length === 0 ? (
+          <div className="apple-card p-10 text-center space-y-4">
+            <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto flex items-center justify-center text-gray-400">
+              <ReferencesIcon />
+            </div>
+            <p className="text-gray-500">No generated memos yet.<br/>Generate a memo in the Policy Lab first.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="apple-card p-6 space-y-4 shadow-sm">
+              <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-50 pb-1">Generate Reference</h3>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Source Task</label>
+                <select
+                  className="w-full bg-gray-50 rounded-xl p-3 border-none text-sm appearance-none"
+                  value={selectedTaskId}
+                  onChange={e => setSelectedTaskId(e.target.value)}
+                >
+                  <option value="">-- Select a task with a generated memo --</option>
+                  {tasksWithResponses.map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Writing Style</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.entries(styleLabels) as [Reference['style'], string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedStyle(key)}
+                      className={`p-3 rounded-xl text-xs font-bold transition-all ${
+                        selectedStyle === key
+                          ? 'bg-black text-white shadow-lg'
+                          : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={!selectedTaskId || refLoading || loading}
+                className="w-full bg-blue-600 text-white text-[10px] font-black px-5 py-4 rounded-xl uppercase tracking-widest flex items-center justify-center space-x-2 active:scale-95 transition-all shadow-blue-100 shadow-md disabled:opacity-50"
+              >
+                {refLoading || loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>Write Reference</span>
+                )}
+              </button>
+            </div>
+
+            {refsForTask.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Generated References</h3>
+                {refsForTask.map(ref => (
+                  <div key={ref.id} className="apple-card p-6 space-y-3 border border-gray-100 shadow-sm animate-in zoom-in-95 duration-300">
+                    <div className="flex justify-between items-center">
+                      <span className="bg-purple-50 text-purple-600 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                        {styleLabels[ref.style]}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">
+                        {new Date(ref.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="prose prose-sm text-gray-800 whitespace-pre-wrap font-serif leading-relaxed max-h-[400px] overflow-y-auto pr-2 custom-scrollbar text-[15px]">
+                      {ref.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ExportView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
       <h2 className="text-2xl font-bold tracking-tight px-2">Download Center</h2>
@@ -780,6 +928,7 @@ const App: React.FC = () => {
         {activeView === 'tasks' && <TasksView />}
         {activeView === 'rubrics' && <RubricsView />}
         {activeView === 'reviews' && <ReviewsView />}
+        {activeView === 'references' && <ReferencesView />}
         {activeView === 'export' && <ExportView />}
         {activeView === 'history' && <HistoryView />}
       </main>
@@ -789,12 +938,13 @@ const App: React.FC = () => {
         <NavButton active={activeView === 'home'} onClick={() => setActiveView('home')} icon={<HomeIcon />} />
         <NavButton active={activeView === 'tasks'} onClick={() => setActiveView('tasks')} icon={<TasksIcon />} />
         <NavButton active={activeView === 'reviews'} onClick={() => setActiveView('reviews')} icon={<ReviewsIcon />} />
+        <NavButton active={activeView === 'references'} onClick={() => setActiveView('references')} icon={<ReferencesIcon />} />
         <NavButton active={activeView === 'rubrics'} onClick={() => setActiveView('rubrics')} icon={<RubricsIcon />} />
         <NavButton active={activeView === 'export'} onClick={() => setActiveView('export')} icon={<ExportIcon />} />
       </nav>
 
       {/* Global Loading */}
-      {loading && activeView !== 'reviews' && (
+      {loading && activeView !== 'reviews' && activeView !== 'references' && (
         <div className="fixed inset-0 bg-white/50 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-200">
           <div className="apple-card p-8 flex flex-col items-center space-y-4 shadow-2xl scale-110">
              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />

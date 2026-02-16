@@ -34,6 +34,7 @@ Polisee is built as a modular "System of Systems":
 -   **The Policy Lab**: A specialized IDE for policy professionals to define tasks with multi-dimensional constraints (Budget, Timeline, Legal, Political, Equity).
 -   **The Evaluation Center**: The verification hub where generated work is cross-referenced against complex rubrics.
 -   **The Ruleset Engine**: A standardized framework for defining "what good looks like" in a specific jurisdiction or domain.
+-   **The Reference Writer**: A multi-style document generator that transforms policy memos into audience-specific reference documents.
 -   **The Sovereign Ledger**: An append-only log of all platform activities, ensuring a verifiable paper trail.
 
 ---
@@ -43,7 +44,8 @@ Polisee is built as a modular "System of Systems":
 -   **Deep Constraint Modeling**: Fields for Budget, Timeline, Legal Limits, Political Feasibility, and Equity Impact.
 -   **Professional Memo Engine**: Generates deliverables using professional header structures (`TO`, `FROM`, `DATE`, `SUBJECT`) and structured logic.
 -   **Custom Rubric Association**: Link specific grading standards to specific tasks for consistent performance monitoring.
--   **Gemini 3 Integration**: Utilizes `gemini-3-flash-preview` for high-reasoning policy analysis and objective evaluation.
+-   **Puter.js AI Integration**: Utilizes `claude-3-5-sonnet` via Puter.js for high-reasoning policy analysis and objective evaluation.
+-   **Reference Writer**: Generate polished reference documents from policy memos in multiple styles (Neutral, Staffer, Brief, One-Pager).
 -   **Apple-Inspired UX**: A clean, responsive interface designed for high-focus professional work.
 -   **Sovereign Data**: All data persists in browser LocalStorage, ensuring private, local-first computation.
 
@@ -54,8 +56,9 @@ Polisee is built as a modular "System of Systems":
 1.  **Define**: Create a task in the **Policy Lab**. Associate it with a specific domain (e.g., Climate, Housing) and a **Ruleset**.
 2.  **Generate**: Trigger the AI Analyst. It synthesizes all constraints into a professional policy memo or brief.
 3.  **Evaluate**: Move to the **Evaluation Center**. The Newton Agent runs an objective assessment based on the linked rubric.
-4.  **Audit**: Review the **History** tab to see the deterministic ledger of every step taken.
-5.  **Export**: Download the entire verified dataset in JSONL or CSV for external reporting.
+4.  **Reference**: Use the **Reference Writer** to produce audience-specific documents (neutral, staffer, brief, or one-pager style).
+5.  **Audit**: Review the **History** tab to see the deterministic ledger of every step taken.
+6.  **Export**: Download the entire verified dataset in JSONL or CSV for external reporting.
 
 ---
 
@@ -83,7 +86,7 @@ This ledger provides the transparency needed for high-stakes government and ente
 ## 🛠️ Technical Stack
 
 -   **Frontend**: React (ESM) + Tailwind CSS
--   **Intelligence**: Google Gemini API (`@google/genai`)
+-   **Intelligence**: Puter.js AI (`claude-3-5-sonnet`)
 -   **Design System**: Apple HIG-inspired custom components
 -   **Storage**: Local-first browser persistence
 -   **Verification**: Custom JSON-Schema-based evaluation logic
